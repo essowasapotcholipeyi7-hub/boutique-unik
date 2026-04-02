@@ -3,6 +3,8 @@ import sqlite3
 from datetime import datetime, timezone
 from config import Config
 
+import os
+
 def get_db():
     # Utiliser un chemin absolu pour Render
     if os.environ.get('RENDER'):
