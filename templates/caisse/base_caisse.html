@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNIK - Caisse</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+        }
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 260px;
+            height: 100%;
+            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+            z-index: 100;
+        }
+        .sidebar h2 {
+            font-size: 24px;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+        }
+        .sidebar nav a {
+            display: block;
+            padding: 12px 15px;
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            transition: 0.3s;
+        }
+        .sidebar nav a:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .main-content {
+            margin-left: 260px;
+            padding: 20px;
+        }
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .card h2 {
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #1e3a8a;
+            display: inline-block;
+        }
+        button {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .logout-btn { background: #e74c3c; color: white; border: none; padding: 8px 18px; border-radius: 25px; cursor: pointer; text-decoration: none; display: inline-block; }
+        .message { padding: 12px; border-radius: 10px; margin-bottom: 15px; }
+        .message.success { background: #d4edda; color: #155724; border-left: 4px solid #27ae60; }
+        .message.error { background: #f8d7da; color: #721c24; border-left: 4px solid #e74c3c; }
+        @media (max-width: 768px) {
+            .sidebar { width: 70px; padding: 15px; }
+            .sidebar h2 { font-size: 0; }
+            .sidebar nav a span:last-child { display: none; }
+            .main-content { margin-left: 70px; }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="sidebar">
+        <h2>🏪 UNIK - Caisse</h2>
+        <nav>
+            <a href="{{ url_for('caisse_index') }}">💰 Vente</a>
+            <a href="{{ url_for('caisse_caisse') }}">📊 Caisse journalière</a>
+        </nav>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <div>
+                <h1>{% block page_title %}Caisse{% endblock %}</h1>
+                <p>Bienvenue, {{ user.nom if user.nom else user.username }}</p>
+            </div>
+            <a href="{{ url_for('logout') }}" class="logout-btn">🔓 Déconnexion</a>
+        </div>
+        
+        {% block content %}{% endblock %}
+    </div>
+    
+    <script>
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            return div.innerHTML;
+        }
+        
+        function showMessage(elementId, message, type) {
+            const div = document.getElementById(elementId);
+            if (div) {
+                div.innerHTML = `<div class="message ${type}">${message}</div>`;
+                setTimeout(() => div.innerHTML = '', 4000);
+            }
+        }
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,312 @@
+{% extends "gerant/base_gerant.html" %}
+
+{% block title %}Corrections{% endblock %}
+{% block page_title %}🔄 Corrections des ventes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filters {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .filter-group {
+        flex: 1;
+        min-width: 200px;
+    }
+    .filter-group input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+    }
+    .table-container {
+        overflow-x: auto;
+        max-height: 500px;
+        overflow-y: auto;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th, td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    th {
+        background: #f8f9fa;
+        font-weight: bold;
+        position: sticky;
+        top: 0;
+    }
+    .btn-correction {
+        background: #ff9800;
+        padding: 5px 12px;
+        font-size: 12px;
+    }
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+    }
+    .modal-content {
+        background: white;
+        border-radius: 20px;
+        padding: 30px;
+        width: 90%;
+        max-width: 500px;
+        max-height: 90%;
+        overflow-y: auto;
+    }
+    .return-options {
+        display: flex;
+        gap: 10px;
+        margin: 20px 0;
+        flex-wrap: wrap;
+    }
+    .return-option {
+        flex: 1;
+        min-width: 100px;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 12px;
+        text-align: center;
+        cursor: pointer;
+        transition: 0.3s;
+    }
+    .return-option:hover, .return-option.selected {
+        border-color: #ff9800;
+        background: #fff3e0;
+    }
+    .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>🔍 Rechercher une vente</h2>
+    <div id="correctionMessage"></div>
+    <div class="filters">
+        <div class="filter-group">
+            <input type="text" id="searchCorrection" placeholder="Rechercher par produit, vendeur..." onkeyup="filtrerVentes()">
+        </div>
+        <div>
+            <button onclick="chargerVentesCorrection()">🔄 Actualiser</button>
+        </div>
+    </div>
+    <div class="table-container">
+        <table id="correctionTable">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Heure</th>
+                    <th>Produit</th>
+                    <th>Qté</th>
+                    <th>Prix vendu</th>
+                    <th>Total net</th>
+                    <th>Vendeur</th>
+                    <th>Actions</th>
+                </thead>
+            <tbody>
+                <tr><td colspan="8" style="text-align:center">Chargement...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let toutesVentes = [];
+    
+    async function chargerVentesCorrection() {
+        try {
+            const response = await fetch('/api/gerant/ventes');
+            toutesVentes = await response.json();
+            filtrerVentes();
+        } catch (error) {
+            console.error('Erreur:', error);
+            document.querySelector('#correctionTable tbody').innerHTML = '<tr><td colspan="8" style="text-align:center">❌ Erreur de chargement</td></tr>';
+        }
+    }
+    
+    function filtrerVentes() {
+        const search = document.getElementById('searchCorrection').value.toLowerCase();
+        const filtered = toutesVentes.filter(v => 
+            (v.produit && v.produit.toLowerCase().includes(search)) ||
+            (v.vendeur && v.vendeur.toLowerCase().includes(search))
+        );
+        afficherVentesCorrection(filtered);
+    }
+    
+    function afficherVentesCorrection(ventes) {
+        const tbody = document.querySelector('#correctionTable tbody');
+        if (ventes.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center">Aucune vente trouvée</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = '';
+        ventes.forEach((v, idx) => {
+            tbody.innerHTML += `
+                <tr>
+                    <td style="white-space:nowrap">${escapeHtml(v.date || '')}</td>
+                    <td style="white-space:nowrap">${escapeHtml(v.heure || '')}</td>
+                    <td><strong>${escapeHtml(v.produit || '')}</strong></td>
+                    <td style="text-align:right">${v.quantite || 0}</td>
+                    <td style="text-align:right">${(v.prix_vendu || 0).toLocaleString()} FCFA</td>
+                    <td style="text-align:right"><strong>${(v.total_net || 0).toLocaleString()} FCFA</strong></td>
+                    <td>${escapeHtml(v.vendeur || '')}</td>
+                    <td><button class="btn-correction" onclick="ouvrirCorrection(${v.id})">🔄 Corriger</button></td>
+                </tr>
+            `;
+        });
+    }
+    
+    let venteSelectionnee = null;
+    let actionSelectionnee = null;
+    
+    function ouvrirCorrection(id) {
+        venteSelectionnee = toutesVentes.find(v => v.id == id);
+        if (!venteSelectionnee) return;
+        
+        const modalHtml = `
+            <div id="modalCorrection" class="modal">
+                <div class="modal-content">
+                    <h2 style="margin-bottom:20px;">🔄 Correction de la vente</h2>
+                    <div style="background:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:15px;">
+                        <p><strong>📦 Produit:</strong> ${escapeHtml(venteSelectionnee.produit)}</p>
+                        <p><strong>🔢 Quantité:</strong> ${venteSelectionnee.quantite}</p>
+                        <p><strong>💰 Prix vendu:</strong> ${venteSelectionnee.prix_vendu.toLocaleString()} FCFA</p>
+                        <p><strong>💵 Total:</strong> ${venteSelectionnee.total_net.toLocaleString()} FCFA</p>
+                        <p><strong>👤 Vendeur:</strong> ${escapeHtml(venteSelectionnee.vendeur)}</p>
+                        <p><strong>📅 Date:</strong> ${venteSelectionnee.date} ${venteSelectionnee.heure}</p>
+                    </div>
+                    
+                    <div class="return-options">
+                        <div class="return-option" onclick="selectAction('remboursement')" id="optRemboursement"><div>💰</div><div>Remboursement</div></div>
+                        <div class="return-option" onclick="selectAction('annulation')" id="optAnnulation"><div>❌</div><div>Annulation</div></div>
+                        <div class="return-option" onclick="selectAction('correctionPrix')" id="optCorrectionPrix"><div>✏️</div><div>Correction prix</div></div>
+                        <div class="return-option" onclick="selectAction('correctionQuantite')" id="optCorrectionQuantite"><div>🔢</div><div>Correction quantité</div></div>
+                    </div>
+                    
+                    <div id="formRemboursement" style="display:none;"><div class="form-group"><label>Motif</label><input type="text" id="motifRemboursement" placeholder="Motif du remboursement"></div></div>
+                    <div id="formAnnulation" style="display:none;"><div class="form-group"><label>Motif</label><input type="text" id="motifAnnulation" placeholder="Motif de l'annulation"></div></div>
+                    <div id="formCorrectionPrix" style="display:none;"><div class="form-group"><label>Ancien prix</label><input type="text" id="ancienPrix" readonly value="${venteSelectionnee.prix_vendu}"></div><div class="form-group"><label>Nouveau prix (FCFA)</label><input type="number" id="nouveauPrix"></div><div class="form-group"><label>Motif</label><input type="text" id="motifPrix"></div></div>
+                    <div id="formCorrectionQuantite" style="display:none;"><div class="form-group"><label>Ancienne quantité</label><input type="text" id="ancienneQuantite" readonly value="${venteSelectionnee.quantite}"></div><div class="form-group"><label>Nouvelle quantité</label><input type="number" id="nouvelleQuantite"></div><div class="form-group"><label>Motif</label><input type="text" id="motifQuantite"></div></div>
+                    
+                    <div style="display:flex; gap:10px; margin-top:20px;">
+                        <button onclick="validerCorrection()">✅ Valider</button>
+                        <button onclick="fermerModalCorrection()" style="background:#e74c3c;">❌ Annuler</button>
+                    </div>
+                    <div id="correctionError" class="message error" style="display:none; margin-top:15px;"></div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        selectAction(null);
+    }
+    
+    function selectAction(action) {
+        actionSelectionnee = action;
+        const actions = ['remboursement', 'annulation', 'correctionPrix', 'correctionQuantite'];
+        actions.forEach(a => {
+            const opt = document.getElementById(`opt${a.charAt(0).toUpperCase() + a.slice(1)}`);
+            if (opt) opt.classList.remove('selected');
+            const form = document.getElementById(`form${a.charAt(0).toUpperCase() + a.slice(1)}`);
+            if (form) form.style.display = 'none';
+        });
+        if (action) {
+            const optId = `opt${action.charAt(0).toUpperCase() + action.slice(1)}`;
+            const formId = `form${action.charAt(0).toUpperCase() + action.slice(1)}`;
+            const opt = document.getElementById(optId);
+            const form = document.getElementById(formId);
+            if (opt) opt.classList.add('selected');
+            if (form) form.style.display = 'block';
+        }
+    }
+    
+    function fermerModalCorrection() {
+        const modal = document.getElementById('modalCorrection');
+        if (modal) modal.remove();
+        venteSelectionnee = null;
+        actionSelectionnee = null;
+    }
+    
+    async function validerCorrection() {
+        if (!venteSelectionnee || !actionSelectionnee) {
+            showError('Sélectionnez une action');
+            return;
+        }
+        
+        const data = { id: venteSelectionnee.id, action: actionSelectionnee };
+        
+        switch(actionSelectionnee) {
+            case 'remboursement':
+                data.motif = document.getElementById('motifRemboursement').value || 'Remboursement client';
+                if (!confirm(`Rembourser ${venteSelectionnee.total_net.toLocaleString()} FCFA ?`)) return;
+                break;
+            case 'annulation':
+                data.motif = document.getElementById('motifAnnulation').value || 'Annulation client';
+                if (!confirm('Annuler cette vente ?')) return;
+                break;
+            case 'correctionPrix':
+                data.nouveau_prix = parseFloat(document.getElementById('nouveauPrix').value);
+                data.motif = document.getElementById('motifPrix').value || 'Correction prix';
+                if (!data.nouveau_prix || data.nouveau_prix <= 0) { showError('Nouveau prix valide requis'); return; }
+                if (!confirm(`Corriger le prix de ${venteSelectionnee.prix_vendu} à ${data.nouveau_prix} FCFA ?`)) return;
+                break;
+            case 'correctionQuantite':
+                data.nouvelle_quantite = parseInt(document.getElementById('nouvelleQuantite').value);
+                data.motif = document.getElementById('motifQuantite').value || 'Correction quantité';
+                if (!data.nouvelle_quantite || data.nouvelle_quantite <= 0) { showError('Nouvelle quantité valide requise'); return; }
+                if (!confirm(`Corriger la quantité de ${venteSelectionnee.quantite} à ${data.nouvelle_quantite} ?`)) return;
+                break;
+        }
+        
+        try {
+            const response = await fetch('/api/gerant/correction', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            if (result.success) {
+                showMessage('correctionMessage', result.message, 'success');
+                fermerModalCorrection();
+                chargerVentesCorrection();
+                if (typeof chargerStock === 'function') chargerStock();
+                if (typeof chargerHistoriqueVentes === 'function') chargerHistoriqueVentes();
+            } else {
+                showError(result.error);
+            }
+        } catch (error) {
+            showError('Erreur lors de la correction');
+        }
+    }
+    
+    function showError(msg) {
+        const errorDiv = document.getElementById('correctionError');
+        if (errorDiv) {
+            errorDiv.innerHTML = msg;
+            errorDiv.style.display = 'block';
+            setTimeout(() => errorDiv.style.display = 'none', 3000);
+        } else {
+            alert(msg);
+        }
+    }
+    
+    chargerVentesCorrection();
+</script>
+{% endblock %}

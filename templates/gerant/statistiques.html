@@ -1,0 +1,251 @@
+{% extends "gerant/base_gerant.html" %}
+
+{% block title %}Statistiques{% endblock %}
+{% block page_title %}📊 Statistiques des ventes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filters {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+    .filter-group {
+        flex: 1;
+        min-width: 150px;
+    }
+    .filter-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #4a5568;
+    }
+    .filter-group select, .filter-group input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+    }
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    .stat-card {
+        background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 20px;
+        text-align: center;
+    }
+    .stat-card h3 {
+        font-size: 28px;
+        margin-bottom: 5px;
+    }
+    .table-container {
+        overflow-x: auto;
+        max-height: 400px;
+        overflow-y: auto;
+        margin-top: 15px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th, td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    th {
+        background: #f8f9fa;
+        font-weight: bold;
+        position: sticky;
+        top: 0;
+    }
+    canvas {
+        max-height: 300px;
+        width: 100%;
+        margin: 20px 0;
+    }
+    .btn-export {
+        background: #2d6a4f;
+        margin-top: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📅 Période d'analyse</h2>
+    <div class="filters">
+        <div class="filter-group">
+            <label>📆 Période</label>
+            <select id="periodeStat" onchange="changerPeriode()">
+                <option value="jour">Aujourd'hui</option>
+                <option value="semaine">Cette semaine</option>
+                <option value="mois">Ce mois</option>
+                <option value="annee">Cette année</option>
+                <option value="personnalise">Période personnalisée</option>
+            </select>
+        </div>
+        <div class="filter-group" id="dateDebutGroup" style="display:none;">
+            <label>📅 Date début</label>
+            <input type="date" id="dateDebut">
+        </div>
+        <div class="filter-group" id="dateFinGroup" style="display:none;">
+            <label>📅 Date fin</label>
+            <input type="date" id="dateFin">
+        </div>
+        <div>
+            <button onclick="chargerStatistiques()">🔄 Actualiser</button>
+            <button onclick="exporterStatistiques()" class="btn-export">📥 Exporter CSV</button>
+        </div>
+    </div>
+</div>
+
+<div class="stats-grid" id="statsCards">
+    <div class="stat-card"><h3 id="statCA">0</h3><p>Chiffre d'affaires</p></div>
+    <div class="stat-card"><h3 id="statNbVentes">0</h3><p>Nombre de ventes</p></div>
+    <div class="stat-card"><h3 id="statNbProduits">0</h3><p>Produits vendus</p></div>
+    <div class="stat-card"><h3 id="statTicketMoyen">0</h3><p>Ticket moyen</p></div>
+</div>
+
+<div class="card">
+    <h2>📈 Évolution des ventes</h2>
+    <canvas id="evolutionChart"></canvas>
+</div>
+
+<div class="card">
+    <h2>🏆 Top produits</h2>
+    <div class="table-container">
+        <table id="topProduitsTable">
+            <thead><tr><th>Produit</th><th>Quantité vendue</th><th>Chiffre d'affaires</th></tr></thead>
+            <tbody><tr><td colspan="3" style="text-align:center">Chargement...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>👥 Top vendeurs</h2>
+    <div class="table-container">
+        <table id="topVendeursTable">
+            <thead><tr><th>Vendeur</th><th>Nombre de ventes</th><th>Chiffre d'affaires</th></tr></thead>
+            <tbody><tr><td colspan="3" style="text-align:center">Chargement...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    let evolutionChart = null;
+    
+    function changerPeriode() {
+        const periode = document.getElementById('periodeStat').value;
+        const debutGroup = document.getElementById('dateDebutGroup');
+        const finGroup = document.getElementById('dateFinGroup');
+        if (periode === 'personnalise') {
+            debutGroup.style.display = 'block';
+            finGroup.style.display = 'block';
+        } else {
+            debutGroup.style.display = 'none';
+            finGroup.style.display = 'none';
+        }
+        chargerStatistiques();
+    }
+    
+    async function chargerStatistiques() {
+        const periode = document.getElementById('periodeStat').value;
+        let url = `/api/gerant/statistiques?periode=${periode}`;
+        if (periode === 'personnalise') {
+            const debut = document.getElementById('dateDebut').value;
+            const fin = document.getElementById('dateFin').value;
+            if (!debut || !fin) {
+                showMessage('statsCards', 'Veuillez sélectionner les dates', 'error');
+                return;
+            }
+            url += `&date_debut=${debut}&date_fin=${fin}`;
+        }
+        
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            document.getElementById('statCA').innerHTML = data.chiffre_affaire.toLocaleString() + ' FCFA';
+            document.getElementById('statNbVentes').innerHTML = data.nb_ventes;
+            document.getElementById('statNbProduits').innerHTML = data.nb_produits_vendus;
+            document.getElementById('statTicketMoyen').innerHTML = Math.round(data.ticket_moyen).toLocaleString() + ' FCFA';
+            
+            // Top produits
+            const topBody = document.querySelector('#topProduitsTable tbody');
+            if (data.top_produits && data.top_produits.length > 0) {
+                topBody.innerHTML = '';
+                data.top_produits.forEach(p => {
+                    topBody.innerHTML += `
+                        <tr>
+                            <td><strong>${escapeHtml(p.produit)}</strong></td>
+                            <td style="text-align:right">${p.quantite}</td>
+                            <td style="text-align:right">${p.chiffre.toLocaleString()} FCFA</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                topBody.innerHTML = '<tr><td colspan="3" style="text-align:center">Aucune donnée</td></tr>';
+            }
+            
+            // Top vendeurs
+            const vendeursBody = document.querySelector('#topVendeursTable tbody');
+            if (data.top_vendeurs && data.top_vendeurs.length > 0) {
+                vendeursBody.innerHTML = '';
+                data.top_vendeurs.forEach(v => {
+                    vendeursBody.innerHTML += `
+                        <tr>
+                            <td><strong>${escapeHtml(v.vendeur)}</strong></td>
+                            <td style="text-align:right">${v.nb_ventes}</td>
+                            <td style="text-align:right">${v.chiffre.toLocaleString()} FCFA</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                vendeursBody.innerHTML = '<tr><td colspan="3" style="text-align:center">Aucune donnée</td></tr>';
+            }
+            
+            // Graphique
+            if (evolutionChart) evolutionChart.destroy();
+            const ctx = document.getElementById('evolutionChart').getContext('2d');
+            evolutionChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.evolution.map(e => e.periode),
+                    datasets: [{
+                        label: 'Chiffre d\'affaires (FCFA)',
+                        data: data.evolution.map(e => e.total),
+                        borderColor: '#1e3a8a',
+                        backgroundColor: 'rgba(30, 58, 138, 0.1)',
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: { legend: { position: 'top' } }
+                }
+            });
+        } catch (error) {
+            console.error('Erreur:', error);
+            showMessage('statsCards', 'Erreur de chargement des statistiques', 'error');
+        }
+    }
+    
+    function exporterStatistiques() {
+        alert('Export CSV à implémenter');
+    }
+    
+    chargerStatistiques();
+</script>
+{% endblock %}

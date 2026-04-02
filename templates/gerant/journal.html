@@ -1,0 +1,233 @@
+{% extends "gerant/base_gerant.html" %}
+
+{% block title %}Journal{% endblock %}
+{% block page_title %}📓 Journal des mouvements{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filters {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .filter-group {
+        flex: 1;
+        min-width: 150px;
+    }
+    .filter-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #4a5568;
+    }
+    .filter-group input, .filter-group select {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+    }
+    .table-container {
+        overflow-x: auto;
+        max-height: 550px;
+        overflow-y: auto;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    th, td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    th {
+        background: #f8fafc;
+        font-weight: bold;
+        position: sticky;
+        top: 0;
+    }
+    .type-vente { background-color: #e8f5e9; border-left: 3px solid #4caf50; }
+    .type-panier { background-color: #e3f2fd; border-left: 3px solid #2196f3; }
+    .type-annulation { background-color: #ffebee; border-left: 3px solid #f44336; }
+    .type-remboursement { background-color: #ffebee; border-left: 3px solid #f44336; }
+    .type-ajout { background-color: #fff3e0; border-left: 3px solid #ff9800; }
+    .type-approvisionnement { background-color: #e0f2fe; border-left: 3px solid #0ea5e9; }
+    .type-correction { background-color: #f3e5f5; border-left: 3px solid #9c27b0; }
+    .type-suppression { background-color: #fbe9e7; border-left: 3px solid #ff5722; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>🔍 Filtres</h2>
+    <div class="filters">
+        <div class="filter-group">
+            <label>📅 Date début</label>
+            <input type="date" id="dateDebut">
+        </div>
+        <div class="filter-group">
+            <label>📅 Date fin</label>
+            <input type="date" id="dateFin">
+        </div>
+        <div class="filter-group">
+            <label>🏷️ Type</label>
+            <select id="typeFilter">
+                <option value="all">Tous</option>
+                <option value="VENTE">Ventes</option>
+                <option value="PANIER">Ventes en panier</option>
+                <option value="AJOUT">Ajouts catalogue</option>
+                <option value="SUPPRESSION">Suppressions</option>
+                <option value="APPROVISIONNEMENT">Approvisionnements</option>
+                <option value="ANNULATION">Annulations</option>
+                <option value="REMBOURSEMENT">Remboursements</option>
+                <option value="CORRECTION">Corrections</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>🔎 Produit / Utilisateur</label>
+            <input type="text" id="searchFilter" placeholder="Rechercher...">
+        </div>
+        <div class="filter-buttons">
+            <button onclick="appliquerFiltres()">🔍 Appliquer</button>
+            <button onclick="resetFiltres()" style="background:#6b7280;">🔄 Réinitialiser</button>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>📋 Journal des mouvements</h2>
+    <div class="table-container">
+        <table id="journalTable">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Heure</th>
+                    <th>Type</th>
+                    <th>Produit</th>
+                    <th>Quantité</th>
+                    <th>Stock avant</th>
+                    <th>Stock après</th>
+                    <th>Utilisateur</th>
+                    <th>Détails</th>
+                </thead>
+            <tbody>
+                <tr><td colspan="9" style="text-align:center">Chargement...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <button onclick="chargerJournal()" style="margin-top:15px;">🔄 Actualiser</button>
+</div>
+
+<script>
+    let tousMouvements = [];
+    
+    async function chargerJournal() {
+        try {
+            const response = await fetch('/api/gerant/journal');
+            tousMouvements = await response.json();
+            appliquerFiltres();
+        } catch (error) {
+            console.error('Erreur:', error);
+            document.querySelector('#journalTable tbody').innerHTML = '<tr><td colspan="9" style="text-align:center">❌ Erreur de chargement</td></tr>';
+        }
+    }
+    
+    function getTypeClass(type) {
+        if (type.includes('VENTE')) return 'type-vente';
+        if (type.includes('PANIER')) return 'type-panier';
+        if (type.includes('ANNULATION')) return 'type-annulation';
+        if (type.includes('REMBOURSEMENT')) return 'type-remboursement';
+        if (type.includes('AJOUT')) return 'type-ajout';
+        if (type.includes('APPROVISIONNEMENT')) return 'type-approvisionnement';
+        if (type.includes('CORRECTION')) return 'type-correction';
+        if (type.includes('SUPPRESSION')) return 'type-suppression';
+        return '';
+    }
+    
+    function appliquerFiltres() {
+        const dateDebut = document.getElementById('dateDebut').value;
+        const dateFin = document.getElementById('dateFin').value;
+        const typeFilter = document.getElementById('typeFilter').value;
+        const search = document.getElementById('searchFilter').value.toLowerCase();
+        
+        let filtered = [...tousMouvements];
+        
+        // Filtre date
+        if (dateDebut) {
+            const debut = new Date(dateDebut);
+            filtered = filtered.filter(m => {
+                if (!m.date) return false;
+                const [jour, mois, annee] = m.date.split('/');
+                const mDate = new Date(annee, mois-1, jour);
+                return mDate >= debut;
+            });
+        }
+        if (dateFin) {
+            const fin = new Date(dateFin);
+            fin.setHours(23, 59, 59);
+            filtered = filtered.filter(m => {
+                if (!m.date) return false;
+                const [jour, mois, annee] = m.date.split('/');
+                const mDate = new Date(annee, mois-1, jour);
+                return mDate <= fin;
+            });
+        }
+        
+        // Filtre type
+        if (typeFilter !== 'all') {
+            filtered = filtered.filter(m => m.type && m.type.includes(typeFilter));
+        }
+        
+        // Filtre recherche
+        if (search) {
+            filtered = filtered.filter(m => 
+                (m.produit && m.produit.toLowerCase().includes(search)) ||
+                (m.utilisateur && m.utilisateur.toLowerCase().includes(search))
+            );
+        }
+        
+        afficherJournal(filtered);
+    }
+    
+    function resetFiltres() {
+        document.getElementById('dateDebut').value = '';
+        document.getElementById('dateFin').value = '';
+        document.getElementById('typeFilter').value = 'all';
+        document.getElementById('searchFilter').value = '';
+        appliquerFiltres();
+    }
+    
+    function afficherJournal(mouvements) {
+        const tbody = document.querySelector('#journalTable tbody');
+        if (mouvements.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center">Aucun mouvement trouvé</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = '';
+        mouvements.forEach(m => {
+            const typeClass = getTypeClass(m.type);
+            tbody.innerHTML += `
+                <tr class="${typeClass}">
+                    <td style="white-space:nowrap">${escapeHtml(m.date || '')}</td>
+                    <td style="white-space:nowrap">${escapeHtml(m.heure || '')}</td>
+                    <td><strong>${escapeHtml(m.type || '')}</strong></td>
+                    <td>${escapeHtml(m.produit || '')}</td>
+                    <td style="text-align:right">${escapeHtml(m.quantite || '0')}</td>
+                    <td style="text-align:right">${(m.stock_avant || 0).toLocaleString()}</td>
+                    <td style="text-align:right">${(m.stock_apres || 0).toLocaleString()}</td>
+                    <td>${escapeHtml(m.utilisateur || '')}</td>
+                    <td>${escapeHtml(m.details || '')}</td>
+                </tr>
+            `;
+        });
+    }
+    
+    chargerJournal();
+    setInterval(chargerJournal, 30000);
+</script>
+{% endblock %}

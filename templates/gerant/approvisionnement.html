@@ -1,0 +1,172 @@
+{% extends "gerant/base_gerant.html" %}
+
+{% block title %}Approvisionnement{% endblock %}
+{% block page_title %}📥 Approvisionner le stock{% endblock %}
+
+{% block extra_css %}
+<style>
+    .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+    .form-group {
+        margin-bottom: 15px;
+    }
+    .form-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #4a5568;
+    }
+    .form-group input, .form-group select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+    }
+    .btn-validate {
+        width: 100%;
+        margin-top: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📥 Ajouter du stock</h2>
+    <div id="approMessage"></div>
+    <div class="grid-2">
+        <div class="form-group">
+            <label>📦 Produit</label>
+            <select id="produitAppro" onchange="updateStockActuel()">
+                <option value="">Sélectionnez un produit</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>📊 Stock actuel</label>
+            <input type="text" id="stockActuelAppro" readonly>
+        </div>
+        <div class="form-group">
+            <label>🔢 Quantité à ajouter</label>
+            <input type="number" id="quantiteAppro" min="1" placeholder="0">
+        </div>
+        <div class="form-group">
+            <label>📅 Date d'expiration (optionnel)</label>
+            <input type="date" id="dateExpiration">
+        </div>
+    </div>
+    <button onclick="approvisionner()" class="btn-validate">✅ Valider l'approvisionnement</button>
+</div>
+
+<div class="card">
+    <h2>📋 Derniers approvisionnements</h2>
+    <div class="table-container">
+        <table id="approvisionnementsTable">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Heure</th>
+                    <th>Produit</th>
+                    <th>Quantité</th>
+                    <th>Utilisateur</th>
+                </thead>
+            <tbody>
+                <tr><td colspan="5" style="text-align:center">Chargement...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <button onclick="chargerApprovisionnements()" style="margin-top:15px;">🔄 Actualiser</button>
+</div>
+
+<script>
+    let produits = [];
+    
+    async function chargerProduitsAppro() {
+        try {
+            const response = await fetch('/api/caisse/produits');
+            produits = await response.json();
+            const select = document.getElementById('produitAppro');
+            select.innerHTML = '<option value="">Sélectionnez un produit</option>';
+            produits.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.nom;
+                opt.textContent = `${p.nom} (Stock: ${p.stock})`;
+                select.appendChild(opt);
+            });
+        } catch(e) { console.error(e); }
+    }
+    
+    function updateStockActuel() {
+        const produit = document.getElementById('produitAppro').value;
+        const p = produits.find(p => p.nom === produit);
+        if (p) {
+            document.getElementById('stockActuelAppro').value = p.stock;
+        } else {
+            document.getElementById('stockActuelAppro').value = '';
+        }
+    }
+    
+    async function approvisionner() {
+        const produit = document.getElementById('produitAppro').value;
+        const quantite = parseInt(document.getElementById('quantiteAppro').value);
+        if (!produit || !quantite || quantite <= 0) {
+            showMessage('approMessage', '❌ Sélectionnez un produit et une quantité valide', 'error');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/gerant/approvisionnement', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ produit, quantite })
+            });
+            const result = await response.json();
+            if (result.success) {
+                showMessage('approMessage', result.message, 'success');
+                document.getElementById('quantiteAppro').value = '';
+                document.getElementById('dateExpiration').value = '';
+                chargerProduitsAppro();
+                chargerApprovisionnements();
+                if (typeof chargerStock === 'function') chargerStock();
+                if (typeof chargerProduitsVente === 'function') chargerProduitsVente();
+            } else {
+                showMessage('approMessage', `❌ ${result.error}`, 'error');
+            }
+        } catch(e) {
+            showMessage('approMessage', '❌ Erreur lors de l\'approvisionnement', 'error');
+        }
+    }
+    
+    async function chargerApprovisionnements() {
+        try {
+            const response = await fetch('/api/gerant/journal');
+            const journal = await response.json();
+            const appros = journal.filter(j => j.type === 'APPROVISIONNEMENT');
+            const tbody = document.querySelector('#approvisionnementsTable tbody');
+            if (appros.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">Aucun approvisionnement</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            appros.forEach(a => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td style="white-space:nowrap">${escapeHtml(a.date)}</td>
+                        <td style="white-space:nowrap">${escapeHtml(a.heure)}</td>
+                        <td><strong>${escapeHtml(a.produit)}</strong></td>
+                        <td style="text-align:right">${a.quantite}</td>
+                        <td>${escapeHtml(a.utilisateur)}</td>
+                    </tr>
+                `;
+            });
+        } catch(e) { console.error(e); }
+    }
+    
+    chargerProduitsAppro();
+    chargerApprovisionnements();
+</script>
+{% endblock %}
