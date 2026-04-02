@@ -4,15 +4,26 @@ from datetime import datetime, timezone
 from config import Config
 
 def get_db():
-    """Établit la connexion à la base de données"""
-    conn = sqlite3.connect(Config.DATABASE)
+    # Utiliser un chemin absolu pour Render
+    if os.environ.get('RENDER'):
+        db_path = '/tmp/boutique.db'
+    else:
+        db_path = Config.DATABASE
+    
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
-    """Crée les tables si elles n'existent pas"""
-    conn = get_db()
+    if os.environ.get('RENDER'):
+        db_path = '/tmp/boutique.db'
+    else:
+        db_path = Config.DATABASE
+    
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
+    # ... le reste du code reste identique
     
     # Table PRODUITS (catalogue)
     cursor.execute('''
